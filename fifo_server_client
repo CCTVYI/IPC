@@ -1,0 +1,96 @@
+//使用命名管道实现server/client之间的通信
+
+1.Makefile
+
+.PHONY:all
+all:clientPipe serverPipe
+clientPipe:clientPipe.c
+	gcc -o $@ $^
+serverPipe:serverPipe.c
+	gcc -o $@ $^
+.PHONY:clean
+clean:
+	rm -f clientPipe serverPipe
+  
+2.serverPipe.c
+
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdlib.h>
+
+#define ERR_EXIT(m)\
+    do{\
+	perror(m);\
+	exit(EXIT_FAILURE);\
+    }while(0);
+
+int main()
+{
+    umask(0);  //当umask取0时，取反，相当于文件可以使用最大的权限为666；当umask取002，可使用最大的权限是664
+    if(mkfifo("mypipe",0644)){
+	    ERR_EXIT("mkfifo");
+    }
+    int rfd=open("mypipe",O_RDONLY);  //打开管道
+    if(rfd<0){
+	    ERR_EXIT("open");
+    }
+    char buf[1024];
+    while(1){
+       	printf("Please wait...\n");
+	      ssize_t s=read(rfd,buf,sizeof(buf)-1);  //将管道的数据读入buf中，需要注意的是还读到了换行符
+	if(s>0){
+	    buf[s-1]=0;  //将换行符变为0
+	    printf("client say# %s\n",buf);
+	}else if(s==0){
+	    printf("client quit\n");
+	    exit(EXIT_SUCCESS);
+	}else{
+	    ERR_EXIT("read");
+	}
+    }
+	close(rfd);
+	return 0;
+}
+
+3.clientPipe.c
+
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define ERR_EXIT(m)\
+    do{\
+	perror(m);\
+	exit(EXIT_FAILURE);\
+    }while(0);
+
+int main()
+{
+    int wfd=open("mypipe",O_WRONLY);
+    if(wfd<0){
+	ERR_EXIT("open");
+    }
+
+    char buf[1024];
+    while(1){
+	buf[0]=0;
+	printf("Please enter# ");
+	fflush(stdout);
+	ssize_t s=read(0,buf,sizeof(buf)-1);  //从键盘中还读到了换行符，比如abc‘\n’
+	if(s>0){
+	    buf[s]=0;
+	    write(wfd,buf,strlen(buf));  //将换行符也写入到了命名管道
+	}else if(s<=0){
+	    ERR_EXIT("read");
+	}
+    }
+    close(wfd);
+    return 0;
+}
