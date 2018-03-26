@@ -1,0 +1,112 @@
+//实现共享内存
+1.Makefile
+
+.PHONY:all
+all:server client
+server:server.c comm.c
+	gcc -o $@ $^
+client:client.c comm.c
+	gcc -o $@ $^
+.PHONY:clean
+clean:
+	rm -f client server
+  
+2.comm.h
+  
+#ifndef _COMM_H_
+#define _COMM_H_
+
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+
+#define PATHNAME "."
+#define PROJ_ID 0x6666
+
+int createShm(int size);
+int destroyShm(int shmid);
+int getShm(int size);
+
+#endif
+
+3.comm.c
+
+#include "comm.h"
+
+static int commShm(int size,int flags)
+{
+	key_t key=ftok(PATHNAME,PROJ_ID);
+	if(key<0){
+		perror("ftok");
+		return -1;
+	}
+	int shmid=0;
+	if((shmid=shmget(key,size,flags))<0){
+		perror("shmid");
+		return -2;
+	}
+	return shmid;
+}
+
+int destroyShm(int shmid)
+{
+	if(shmctl(shmid,IPC_RMID,NULL)<0){
+		perror("shmctl");
+		return -1;
+	}
+	return 0;
+}
+
+int createShm(int size)
+{
+	return commShm(size,IPC_CREAT|IPC_EXCL|0666);
+}
+
+int getShm(int size)
+{
+	return commShm(size,IPC_CREAT);
+}
+
+4.server.c
+
+#include "comm.h"
+
+int main()
+{
+	int shmid=createShm(4096);  //创建共享内存
+	char  *addr=shmat(shmid,NULL,0);  //连接共享内存
+	sleep(2);
+	int i=0;
+	while(i++<10){
+		printf("client: %s\n",addr);
+		sleep(1);
+	}
+	shmdt(addr);  //断开连接
+	sleep(2);
+	destroyShm(shmid);
+	return 0;
+}
+
+5.client
+
+#include "comm.h"
+
+int main()
+{
+	int shmid=getShm(4096);
+	sleep(1);
+	char  *addr=shmat(shmid,NULL,0);  //连接共享内存
+	sleep(2);
+	int i=0;
+	while(i<10){
+		addr[i]='a'+i;
+		i++;
+		sleep(1);
+	}
+	shmdt(addr);  //断开共享内存
+	sleep(2);
+	return 0;
+}
